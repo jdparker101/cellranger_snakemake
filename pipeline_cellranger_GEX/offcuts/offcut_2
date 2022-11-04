@@ -1,0 +1,71 @@
+import os
+from touch import touch
+
+configfile: "config.yaml"
+
+rule all:
+   input:
+        "pipeline.complete"
+
+rule basespace_download:
+    input:
+        "config.yaml"
+    output:
+        "raw_data_download_GEX/SampleSheet.csv"
+    shell:
+        """bs download run -i {config[run_id]} -o raw_data_download_GEX
+        """
+
+
+rule mkannotations:
+    input:
+        "raw_data_download_GEX/SampleSheet.csv"
+    output:
+        "annotations.csv"
+    shell:
+        """python mkannotations.py
+        """
+
+
+rule cellranger_mkfastq:
+    input:
+        "annotations.csv"
+    output:
+        "mkfastq_stamps/mkfastq.stamp"
+    shell:
+        """~/bin/cellranger-arc-2.0.1/cellranger-arc mkfastq --id=cellranger_fastqs_GEX \
+                                                             --run=raw_data_download_GEX/ \
+                                                             --csv=annotations.csv \
+                                                             --localcores=8 \
+                                                             --localmem=64 2> fastq.log
+           for samp in $(tail -n{config[samplenum]} annotations.csv | awk -F',' '{{print $2 }}'); do    touch mkfastq_stamps/$samp.mkfastq;  done
+           touch {output}
+        """
+
+rule cellranger_count:
+    input:
+        "mkfastq_stamps/{sample_id}.mkfastq"
+    output:
+        "cellranger_count/count_stamps/{sample_id}.count"
+    shell:
+        """cellranger count  --id={wildcards.sample_id} \
+                  --transcriptome=/data/neurogen/referenceGenome/Homo_sapiens/cellranger_references/hg38/transcriptome/refdata-gex-GRCh38-2020-A_Ensembl98_DL-2-25-2021/ \
+                  --fastqs=cellranger_fastqs/outs/fastq_path/ \
+                  --sample=cellranger_count/{wildcards.sample_id} \
+                  --include-introns \
+                  --localcores=8 \
+                  --localmem=64 2> {wildcards.sample_id}.count.log
+        touch {output}
+        touch cellranger_count/count_stamps/count.stamp
+        """
+
+
+rule complete:
+    input:
+        expand(rules.cellranger_count.output
+    output:
+        "pipeline.complete"
+    shell:
+        """touch {output}
+        """
+        

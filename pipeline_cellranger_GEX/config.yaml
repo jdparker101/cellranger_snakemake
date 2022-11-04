@@ -1,0 +1,3 @@
+samplenum: "3"
+rawdatadir: "raw_data_download_GEX"
+fastqdir: "cellranger_fastqs_GEX"
